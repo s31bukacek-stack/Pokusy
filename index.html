@@ -1,1 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Cyberpunk Racing</title>
+<style>
+  body { margin: 0; overflow: hidden; background: #000; }
+  #hud { position: absolute; top: 10px; left: 10px; color: #0ff; font-family: monospace; }
+</style>
+</head>
+<body>
+<div id="hud">Speed: 0</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script>
+// Scene setup
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x000000);
 
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Lighting
+const ambient = new THREE.AmbientLight(0x222222);
+scene.add(ambient);
+const dir = new THREE.DirectionalLight(0xffffff, 1);
+dir.position.set(5, 10, 7.5);
+scene.add(dir);
+
+// Track parameters
+const trackWidth = 10;
+const trackLength = 200;
+
+// Track floor
+const floorGeo = new THREE.BoxGeometry(trackWidth, 0.5, trackLength);
+const floorMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0x111166 });
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.position.y = -0.25;
+scene.add(floor);
+
+// Neon edges on track
+const edges = new THREE.EdgesGeometry(floorGeo);
+const edgeLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: 0x00ffff }));
+edgeLines.position.copy(floor.position);
+scene.add(edgeLines);
+
+// Walls for collision
+const wallMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: 0xff00ff });
+const walls = [];
+for(let z = -trackLength/2; z < trackLength/2; z += 10){
+  const wallGeo = new THREE.BoxGeometry(1,2,10);
+  const left = new THREE.Mesh(wallGeo, wallMat);
+  left.position.set(-trackWidth/2, 1, z);
+  const right = new THREE.Mesh(wallGeo, wallMat);
+  right.position.set(trackWidth/2, 1, z);
+  scene.add(left); scene.add(right);
+  walls.push(left, right);
+}
+
+// Speed boost pads
+const boostMat = new THREE.MeshStandardMaterial({ color: 0xffff00, emissive: 0xffff00 });
+const boosts = [];
+for(let z = -trackLength/2 + 20; z < trackLength/2; z += 40){
+  const boostGeo = new THREE.BoxGeometry(2,0.2,4);
+  const boost = new THREE.Mesh(boostGeo, boostMat);
+  boost.position.set(0,0,z);
+  scene.add(boost);
+  boosts.push(boost);
+}
+
+// Player car
+const carGeo = new THREE.BoxGeometry(1,1,2);
+const carMat = new THREE.MeshStandardMaterial({ color: 0x00ffff, emissive: 0x00ffff });
+const car = new THREE.Mesh(carGeo, carMat);
+car.position.set(0,0.5, trackLength/2 - 10);
+scene.add(car);
+
+camera.position.set(0,5,car.position.z + 10);
+
+// Controls
+const keys = { ArrowUp:false, ArrowDown:false, ArrowLeft:false, ArrowRight:false };
+document.addEventListener('keydown', e => { if(e.code in keys) keys[e.code] = true; });
+document.addEventListener('keyup', e => { if(e.code in keys) keys[e.code] = false; });
+
+let velocity = new THREE.Vector3(0,0,-0.5);
+let boostTimer = 0;
+const hud = document.getElementById('hud');
+
+function animate(){
+  requestAnimationFrame(animate);
+
+  const dirVec = new THREE.Vector3();
+  if(keys.ArrowUp) dirVec.z -= 1;
+  if(keys.ArrowDown) dirVec.z += 1;
+  if(keys.ArrowLeft) dirVec.x -= 1;
+  if(keys.ArrowRight) dirVec.x += 1;
+  dirVec.normalize();
+  velocity.add(dirVec.multiplyScalar(0.05));
+  velocity.multiplyScalar(0.98); // friction
+
+  car.position.add(velocity);
+
+  const carBox = new THREE.Box3().setFromObject(car);
+
+  // Wall collisions
+  for(const wall of walls){
+    const wallBox = new THREE.Box3().setFromObject(wall);
+    if(carBox.intersectsBox(wallBox)){
+      car.position.add(velocity.clone().multiplyScalar(-1));
+      velocity.multiplyScalar(-0.5);
+    }
+  }
+
+  // Boost collisions
+  for(const boost of boosts){
+    const boostBox = new THREE.Box3().setFromObject(boost);
+    if(carBox.intersectsBox(boostBox)){
+      boostTimer = 60; // frames
+    }
+  }
+  if(boostTimer > 0){
+    velocity.multiplyScalar(1.05);
+    boostTimer--;
+  }
+
+  hud.textContent = 'Speed: ' + velocity.length().toFixed(2);
+
+  camera.position.z = car.position.z + 10;
+  camera.position.x = car.position.x;
+  camera.lookAt(car.position);
+
+  renderer.render(scene, camera);
+}
+
+animate();
+
+window.addEventListener('resize', () => {
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+});
+</script>
+</body>
+</html>
