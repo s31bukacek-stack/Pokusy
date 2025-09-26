@@ -1,1 +1,286 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Cyberpunk Tunel Racer</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: "Orbitron", "Segoe UI", sans-serif;
+    }
 
+    body {
+      margin: 0;
+      background: radial-gradient(circle at 20% 20%, #1b0036, #06030f 60%);
+      color: #d8f3ff;
+      overflow: hidden;
+    }
+
+    #overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      pointer-events: none;
+      padding: 1.5rem;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(1.5rem, 5vw, 3rem);
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      text-shadow: 0 0 12px #ff00ff;
+    }
+
+    #hud {
+      display: flex;
+      gap: 1.5rem;
+      font-size: clamp(1rem, 3vw, 1.6rem);
+    }
+
+    #hud span {
+      text-shadow: 0 0 8px rgba(0, 255, 255, 0.8);
+    }
+
+    #controls {
+      align-self: center;
+      font-size: clamp(0.9rem, 2vw, 1.2rem);
+      text-align: center;
+      opacity: 0.85;
+    }
+
+    #restart {
+      align-self: flex-end;
+      font-size: clamp(1rem, 2.5vw, 1.4rem);
+      color: #00f6ff;
+      text-shadow: 0 0 10px rgba(0, 246, 255, 0.6);
+      pointer-events: auto;
+      cursor: pointer;
+      border: 1px solid rgba(0, 246, 255, 0.4);
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      background: rgba(8, 9, 32, 0.45);
+      transition: transform 150ms ease, background 150ms ease;
+    }
+
+    #restart:hover {
+      transform: translateY(-2px);
+      background: rgba(24, 28, 64, 0.6);
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay">
+    <div>
+      <h1>CYBER TUNEL</h1>
+      <div id="hud">
+        <span>Skóre: <strong id="score">0</strong></span>
+        <span>Rychlost: <strong id="speed">0</strong></span>
+      </div>
+    </div>
+    <div id="controls">
+      ← → / A D — uhýbej překážkám • vyhni se kolizi, vydrž co nejdéle!
+    </div>
+    <button id="restart">Restart</button>
+  </div>
+  <script src="https://unpkg.com/three@0.159.0/build/three.min.js"></script>
+  <script>
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x04040a, 0.045);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, powerPreference: "high-performance" });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+    renderer.shadowMap.enabled = true;
+    document.body.appendChild(renderer.domElement);
+
+    const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 200);
+    camera.position.set(0, 1.4, 4.5);
+
+    const neonPurple = new THREE.Color(0xc000ff);
+    const neonCyan = new THREE.Color(0x00f6ff);
+    const neonPink = new THREE.Color(0xff006e);
+
+    const tunnelGeometry = new THREE.CylinderGeometry(6, 6, 200, 32, 1, true);
+    const tunnelMaterial = new THREE.MeshStandardMaterial({
+      color: 0x06030f,
+      side: THREE.BackSide,
+      emissive: neonPurple.clone().multiplyScalar(0.5),
+      emissiveIntensity: 0.5,
+      metalness: 0.8,
+      roughness: 0.2,
+    });
+    const tunnel = new THREE.Mesh(tunnelGeometry, tunnelMaterial);
+    tunnel.rotation.z = Math.PI / 2;
+    tunnel.position.z = -90;
+    scene.add(tunnel);
+
+    const gridMaterial = new THREE.LineBasicMaterial({ color: 0x00f0ff, linewidth: 2 });
+    const grid = new THREE.GridHelper(20, 40, 0xff00cc, 0x00f0ff);
+    grid.rotation.x = Math.PI / 2;
+    grid.position.y = -1.25;
+    scene.add(grid);
+
+    const carGeometry = new THREE.BoxGeometry(0.9, 0.4, 1.6);
+    const carMaterial = new THREE.MeshStandardMaterial({
+      color: 0x1b1f46,
+      emissive: neonCyan,
+      emissiveIntensity: 1.4,
+      metalness: 0.6,
+      roughness: 0.35,
+    });
+    const car = new THREE.Mesh(carGeometry, carMaterial);
+    car.castShadow = true;
+    car.position.set(0, 0, 0);
+    scene.add(car);
+
+    const canopyGeometry = new THREE.BoxGeometry(0.8, 0.25, 0.6);
+    const canopyMaterial = new THREE.MeshStandardMaterial({
+      color: 0x05070e,
+      emissive: neonPink,
+      emissiveIntensity: 0.8,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const canopy = new THREE.Mesh(canopyGeometry, canopyMaterial);
+    canopy.position.set(0, 0.2, -0.1);
+    car.add(canopy);
+
+    const leftLight = new THREE.PointLight(neonCyan, 2.5, 25, 2);
+    leftLight.position.set(-3, 1.5, 2);
+    scene.add(leftLight);
+
+    const rightLight = new THREE.PointLight(neonPink, 2.5, 25, 2);
+    rightLight.position.set(3, 1.5, 2);
+    scene.add(rightLight);
+
+    const ambient = new THREE.AmbientLight(0x101020, 0.8);
+    scene.add(ambient);
+
+    const obstacles = [];
+    const obstacleGeometry = new THREE.BoxGeometry(1.2, 1.2, 1.2);
+
+    function createObstacle() {
+      const mat = new THREE.MeshStandardMaterial({
+        color: 0x0f0b33,
+        emissive: Math.random() > 0.5 ? neonPink : neonPurple,
+        emissiveIntensity: 1.2,
+        metalness: 0.9,
+        roughness: 0.25,
+      });
+      const obstacle = new THREE.Mesh(obstacleGeometry, mat);
+      obstacle.position.set((Math.random() * 4 - 2) * 1.4, 0, -30);
+      obstacle.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
+      scene.add(obstacle);
+      obstacles.push(obstacle);
+    }
+
+    let isGameOver = false;
+    let speed = 12;
+    let score = 0;
+    let spawnTimer = 0;
+    const hudScore = document.getElementById("score");
+    const hudSpeed = document.getElementById("speed");
+
+    const pressed = new Set();
+    window.addEventListener("keydown", (event) => {
+      pressed.add(event.key.toLowerCase());
+    });
+
+    window.addEventListener("keyup", (event) => {
+      pressed.delete(event.key.toLowerCase());
+    });
+
+    const restartButton = document.getElementById("restart");
+    restartButton.addEventListener("click", resetGame);
+
+    function resetGame() {
+      obstacles.forEach((obs) => scene.remove(obs));
+      obstacles.length = 0;
+      score = 0;
+      speed = 12;
+      spawnTimer = 0;
+      car.position.x = 0;
+      isGameOver = false;
+      hudScore.textContent = "0";
+      hudSpeed.textContent = "0";
+    }
+
+    function updateControls(delta) {
+      if (isGameOver) return;
+      const moveSpeed = 5;
+      let direction = 0;
+      if (pressed.has("arrowleft") || pressed.has("a")) direction -= 1;
+      if (pressed.has("arrowright") || pressed.has("d")) direction += 1;
+      car.position.x += direction * moveSpeed * delta;
+      car.position.x = THREE.MathUtils.clamp(car.position.x, -3, 3);
+      car.rotation.z = THREE.MathUtils.lerp(car.rotation.z, -direction * 0.3, 0.15);
+    }
+
+    function updateObstacles(delta) {
+      if (isGameOver) return;
+      spawnTimer -= delta;
+      if (spawnTimer <= 0) {
+        createObstacle();
+        spawnTimer = Math.max(0.4, 1.2 - speed * 0.02);
+      }
+
+      const travel = speed * delta;
+      for (let i = obstacles.length - 1; i >= 0; i--) {
+        const obstacle = obstacles[i];
+        obstacle.position.z += travel;
+        obstacle.rotation.x += delta * 2;
+        obstacle.rotation.y += delta * 1.4;
+
+        if (obstacle.position.distanceToSquared(car.position) < 1.2) {
+          endGame();
+        }
+
+        if (obstacle.position.z > 6) {
+          scene.remove(obstacles[i]);
+          obstacles.splice(i, 1);
+          score += 10;
+          hudScore.textContent = Math.floor(score).toString();
+          speed = Math.min(28, speed + 0.35);
+        }
+      }
+      hudSpeed.textContent = speed.toFixed(0);
+    }
+
+    function endGame() {
+      if (isGameOver) return;
+      isGameOver = true;
+      hudSpeed.textContent = "0";
+      hudScore.textContent = Math.floor(score).toString();
+    }
+
+    let previous = performance.now();
+    function animate(now) {
+      const delta = Math.min(0.1, (now - previous) / 1000);
+      previous = now;
+
+      updateControls(delta);
+      updateObstacles(delta);
+
+      tunnel.rotation.y += delta * 0.2;
+      grid.material.color.offsetHSL(delta * 0.2, 0, 0);
+      leftLight.intensity = 2.2 + Math.sin(now * 0.005) * 0.6;
+      rightLight.intensity = 2.2 + Math.cos(now * 0.004) * 0.6;
+
+      renderer.render(scene, camera);
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener("resize", () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    animate(previous);
+  </script>
+</body>
+</html>
